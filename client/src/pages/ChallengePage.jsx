@@ -10,6 +10,15 @@ import LanguageSelector from '../components/LanguageSelector';
 import SubmissionPanel from '../components/SubmissionPanel';
 import TestCaseResults from '../components/TestCaseResults';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ChallengeTabs from '../components/ChallengeTabs';
+import SolutionsTab from '../components/SolutionsTab';
+import SubmissionsTab from '../components/SubmissionsTab';
+import CustomTestInput from '../components/CustomTestInput';
+import ChallengeTimer from '../components/ChallengeTimer';
+import HintsPanel from '../components/HintsPanel';
+import DiscussionTab from '../components/DiscussionTab';
+import AIReviewPanel from '../components/AIReviewPanel';
+import useCodeRecorder from '../hooks/useCodeRecorder';
 import toast from 'react-hot-toast';
 
 function getStorageKey(slug, langId) {
@@ -24,7 +33,6 @@ export default function ChallengePage() {
   const { slug } = useParams();
   const { user } = useAuth();
   const [challenge, setChallenge] = useState(null);
-  const [sampleTests, setSampleTests] = useState([]);
   const [languageId, setLanguageId] = useState(71);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(true);
@@ -32,30 +40,41 @@ export default function ChallengePage() {
   const [results, setResults] = useState(null);
   const [resultStatus, setResultStatus] = useState(null);
   const [activeTab, setActiveTab] = useState('problem');
+  const [problemTab, setProblemTab] = useState('description');
+  const [hasSolved, setHasSolved] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, targetLangId: null });
   const saveTimerRef = useRef(null);
+  const recorder = useCodeRecorder();
 
-  // Load challenge + restore saved code
   useEffect(() => {
     api.get(`/challenges/${slug}`)
       .then((res) => {
         setChallenge(res.data.challenge);
-        setSampleTests(res.data.sampleTestCases);
         const lang = LANGUAGES.find((l) => l.id === languageId);
         const saved = localStorage.getItem(getStorageKey(slug, languageId));
         setCode(saved || getStarterCode(res.data.challenge, lang?.slug));
       })
       .catch(() => toast.error('Failed to load challenge'))
       .finally(() => setLoading(false));
+
+    if (user) {
+      api.get(`/submissions/challenge/${slug}`)
+        .then((res) => {
+          if (res.data.some((s) => s.status === 'accepted')) setHasSolved(true);
+        })
+        .catch(() => {});
+    }
   }, [slug]);
 
-  // Auto-save code to localStorage (debounced)
+  // Auto-save + recording
   useEffect(() => {
     if (!slug || !code) return;
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       localStorage.setItem(getStorageKey(slug, languageId), code);
     }, 300);
+    recorder.updateCode(code);
+    if (!recorder.recording && code) recorder.startRecording();
     return () => clearTimeout(saveTimerRef.current);
   }, [code, slug, languageId]);
 
@@ -65,11 +84,8 @@ export default function ChallengePage() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
         if (executing) return;
-        if (e.shiftKey) {
-          handleSubmit();
-        } else {
-          handleRun();
-        }
+        if (e.shiftKey) handleSubmit();
+        else handleRun();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -79,9 +95,7 @@ export default function ChallengePage() {
   const handleLanguageChange = (newLangId) => {
     const currentLang = LANGUAGES.find((l) => l.id === languageId);
     const starter = getStarterCode(challenge, currentLang?.slug);
-    const isModified = code !== starter;
-
-    if (isModified) {
+    if (code !== starter) {
       setConfirmDialog({ open: true, targetLangId: newLangId });
     } else {
       switchLanguage(newLangId);
@@ -101,11 +115,7 @@ export default function ChallengePage() {
     setExecuting(true);
     setResults(null);
     try {
-      const res = await api.post('/submissions/run', {
-        challengeSlug: slug,
-        languageId,
-        sourceCode: code,
-      });
+      const res = await api.post('/submissions/run', { challengeSlug: slug, languageId, sourceCode: code });
       setResults(res.data.test_results);
       setResultStatus(res.data.status);
       if (res.data.status === 'accepted') {
@@ -123,15 +133,26 @@ export default function ChallengePage() {
     setExecuting(true);
     setResults(null);
     try {
-      const res = await api.post('/submissions/submit', {
-        challengeSlug: slug,
-        languageId,
-        sourceCode: code,
-      });
+      const res = await api.post('/submissions/submit', { challengeSlug: slug, languageId, sourceCode: code });
       setResults(res.data.test_results);
       setResultStatus(res.data.status);
       if (res.data.status === 'accepted') {
+        setHasSolved(true);
         toast.success(`Accepted! All ${res.data.total_count} tests passed in ${res.data.execution_time?.toFixed(2) || '0'}s`, { duration: 3000 });
+        // Save replay
+        if (recorder.recording) {
+          const { snapshots, durationMs } = recorder.stopRecording();
+          if (snapshots.length > 0) {
+            const lang = LANGUAGES.find((l) => l.id === languageId);
+            api.post('/replays', {
+              challengeSlug: slug,
+              languageName: lang?.name || 'Unknown',
+              snapshots,
+              durationMs,
+              submissionId: res.data.id,
+            }).catch(() => {});
+          }
+        }
       } else {
         toast.error(`${res.data.passed_count}/${res.data.total_count} tests passed. Check results below.`, { duration: 5000 });
       }
@@ -155,21 +176,15 @@ export default function ChallengePage() {
   }
 
   const currentLang = LANGUAGES.find((l) => l.id === languageId);
+  const examples = typeof challenge.examples === 'string' ? JSON.parse(challenge.examples) : challenge.examples;
 
-  const examples = typeof challenge.examples === 'string'
-    ? JSON.parse(challenge.examples)
-    : challenge.examples;
-
-  const problemPanel = (
-    <div className="h-full overflow-auto p-6 bg-gray-900">
+  const descriptionContent = (
+    <>
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-2xl font-bold text-white">{challenge.title}</h1>
         <span
           className="text-xs font-medium px-2.5 py-1 rounded-full"
-          style={{
-            color: DIFFICULTY_COLORS[challenge.difficulty],
-            backgroundColor: `${DIFFICULTY_COLORS[challenge.difficulty]}20`,
-          }}
+          style={{ color: DIFFICULTY_COLORS[challenge.difficulty], backgroundColor: `${DIFFICULTY_COLORS[challenge.difficulty]}20` }}
         >
           {challenge.difficulty}
         </span>
@@ -208,6 +223,20 @@ export default function ChallengePage() {
           </div>
         </div>
       )}
+      {user && <HintsPanel slug={slug} />}
+    </>
+  );
+
+  const problemPanel = (
+    <div className="h-full flex flex-col bg-gray-900">
+      <ChallengeTabs activeTab={problemTab} onChange={setProblemTab} hasSolved={hasSolved} />
+      <div className="flex-1 overflow-auto p-6">
+        {problemTab === 'description' && descriptionContent}
+        {problemTab === 'solutions' && <SolutionsTab slug={slug} hasSolved={hasSolved} />}
+        {problemTab === 'submissions' && <SubmissionsTab slug={slug} onLoadCode={(c) => setCode(c)} />}
+        {problemTab === 'discussion' && <DiscussionTab slug={slug} />}
+        {problemTab === 'ai-review' && <AIReviewPanel slug={slug} hasSolved={hasSolved} />}
+      </div>
     </div>
   );
 
@@ -215,6 +244,9 @@ export default function ChallengePage() {
     <div className="h-full flex flex-col bg-gray-900 overflow-hidden">
       <div className="flex items-center gap-3 p-3 border-b border-gray-700 shrink-0">
         <LanguageSelector value={languageId} onChange={handleLanguageChange} />
+        <div className="ml-auto">
+          <ChallengeTimer />
+        </div>
       </div>
       <div className="flex-1 min-h-0">
         <CodeEditor
@@ -224,6 +256,7 @@ export default function ChallengePage() {
         />
       </div>
       <div className="shrink-0">
+        <CustomTestInput slug={slug} languageId={languageId} code={code} />
         <SubmissionPanel onRun={handleRun} onSubmit={handleSubmit} loading={executing} />
       </div>
       {results && (
@@ -244,35 +277,20 @@ export default function ChallengePage() {
         onCancel={() => setConfirmDialog({ open: false, targetLangId: null })}
       />
 
-      {/* Desktop: split pane */}
       <div className="hidden lg:block h-[calc(100vh-4rem)]">
-        <Split
-          className="flex h-full"
-          sizes={[45, 55]}
-          minSize={300}
-          gutterSize={6}
-          gutterStyle={() => ({
-            backgroundColor: '#374151',
-            cursor: 'col-resize',
-          })}
+        <Split className="flex h-full" sizes={[45, 55]} minSize={300} gutterSize={6}
+          gutterStyle={() => ({ backgroundColor: '#374151', cursor: 'col-resize' })}
         >
           {problemPanel}
           {editorPanel}
         </Split>
       </div>
 
-      {/* Mobile: tabs */}
       <div className="lg:hidden">
         <div className="flex border-b border-gray-700">
           {['problem', 'code', 'results'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-3 text-sm font-medium ${
-                activeTab === tab
-                  ? 'text-green-400 border-b-2 border-green-400'
-                  : 'text-gray-400'
-              }`}
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-3 text-sm font-medium ${activeTab === tab ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-400'}`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
@@ -283,12 +301,8 @@ export default function ChallengePage() {
           {activeTab === 'code' && editorPanel}
           {activeTab === 'results' && (
             <div className="p-4">
-              {results ? (
-                <TestCaseResults results={results} status={resultStatus} />
-              ) : (
-                <p className="text-gray-400 text-center py-20">
-                  Run or submit your code to see results
-                </p>
+              {results ? <TestCaseResults results={results} status={resultStatus} /> : (
+                <p className="text-gray-400 text-center py-20">Run or submit your code to see results</p>
               )}
             </div>
           )}

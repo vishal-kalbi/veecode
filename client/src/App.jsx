@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
@@ -10,6 +11,12 @@ import ChallengeListPage from './pages/ChallengeListPage';
 import ChallengePage from './pages/ChallengePage';
 import ProfilePage from './pages/ProfilePage';
 import NotFoundPage from './pages/NotFoundPage';
+import LeaderboardPage from './pages/LeaderboardPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminChallengesPage from './pages/AdminChallengesPage';
+import AdminChallengeFormPage from './pages/AdminChallengeFormPage';
+import SharedSolutionPage from './pages/SharedSolutionPage';
+import ReplayPage from './pages/ReplayPage';
 
 export default function App() {
   return (
@@ -23,14 +30,14 @@ export default function App() {
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/challenges" element={<ChallengeListPage />} />
             <Route path="/challenges/:slug" element={<ChallengePage />} />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <ProfilePage />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
+            <Route path="/admin/challenges" element={<AdminRoute><AdminChallengesPage /></AdminRoute>} />
+            <Route path="/admin/challenges/new" element={<AdminRoute><AdminChallengeFormPage /></AdminRoute>} />
+            <Route path="/admin/challenges/:id/edit" element={<AdminRoute><AdminChallengeFormPage /></AdminRoute>} />
+            <Route path="/share/:token" element={<SharedSolutionPage />} />
+            <Route path="/replays/:id" element={<ProtectedRoute><ReplayPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </div>

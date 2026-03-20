@@ -3,7 +3,7 @@ import pool from '../config/db.js';
 export async function getProfile(req, res, next) {
   try {
     const user = await pool.query(
-      'SELECT id, username, email, created_at FROM users WHERE id = $1',
+      'SELECT id, username, email, created_at, current_streak, max_streak, score FROM users WHERE id = $1',
       [req.user.userId]
     );
     if (user.rows.length === 0) {
@@ -24,6 +24,23 @@ export async function getProfile(req, res, next) {
       [req.user.userId]
     );
 
+    const badges = await pool.query(
+      'SELECT b.slug, b.name, b.description, b.icon, ub.earned_at FROM user_badges ub JOIN badges b ON ub.badge_id = b.id WHERE ub.user_id = $1',
+      [req.user.userId]
+    );
+
+    const activityData = await pool.query(
+      `SELECT DATE(created_at) as date, COUNT(*) as count
+       FROM submissions WHERE user_id = $1 AND status = 'accepted' AND created_at > NOW() - INTERVAL '365 days'
+       GROUP BY DATE(created_at)`,
+      [req.user.userId]
+    );
+
+    const languageBreakdown = await pool.query(
+      "SELECT language_name, COUNT(DISTINCT challenge_id) as count FROM submissions WHERE user_id = $1 AND status = 'accepted' GROUP BY language_name",
+      [req.user.userId]
+    );
+
     res.json({
       user: user.rows[0],
       stats: {
@@ -33,6 +50,13 @@ export async function getProfile(req, res, next) {
           return acc;
         }, { easy: 0, medium: 0, hard: 0 }),
       },
+      streak: {
+        current: user.rows[0].current_streak || 0,
+        max: user.rows[0].max_streak || 0,
+      },
+      badges: badges.rows,
+      activityData: activityData.rows,
+      languageBreakdown: languageBreakdown.rows,
     });
   } catch (err) {
     next(err);

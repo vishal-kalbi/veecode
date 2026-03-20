@@ -6,6 +6,13 @@ import authRoutes from './routes/authRoutes.js';
 import challengeRoutes from './routes/challengeRoutes.js';
 import submissionRoutes from './routes/submissionRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import leaderboardRoutes from './routes/leaderboardRoutes.js';
+import hintRoutes from './routes/hintRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import commentRoutes from './routes/commentRoutes.js';
+import shareRoutes from './routes/shareRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
+import replayRoutes from './routes/replayRoutes.js';
 import errorHandler from './middleware/errorHandler.js';
 
 const app = express();
@@ -23,6 +30,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/challenges', challengeRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/hints', hintRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/share', shareRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/replays', express.json({ limit: '5mb' }), replayRoutes);
 
 app.use(errorHandler);
 

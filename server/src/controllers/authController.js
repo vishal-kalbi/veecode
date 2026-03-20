@@ -4,7 +4,7 @@ import pool from '../config/db.js';
 
 function signToken(user) {
   return jwt.sign(
-    { userId: user.id, username: user.username },
+    { userId: user.id, username: user.username, role: user.role || 'user' },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -22,7 +22,7 @@ export async function signup(req, res, next) {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
+      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, role, created_at',
       [username, email, passwordHash]
     );
 
@@ -58,7 +58,7 @@ export async function login(req, res, next) {
     const token = signToken(user);
     res.json({
       token,
-      user: { id: user.id, username: user.username, email: user.email, created_at: user.created_at },
+      user: { id: user.id, username: user.username, email: user.email, role: user.role, created_at: user.created_at },
     });
   } catch (err) {
     next(err);
@@ -68,7 +68,7 @@ export async function login(req, res, next) {
 export async function me(req, res, next) {
   try {
     const result = await pool.query(
-      'SELECT id, username, email, created_at FROM users WHERE id = $1',
+      'SELECT id, username, email, role, created_at FROM users WHERE id = $1',
       [req.user.userId]
     );
     if (result.rows.length === 0) {

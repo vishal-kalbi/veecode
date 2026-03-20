@@ -24,11 +24,19 @@ export default function Navbar() {
             <Link to="/challenges" className={navClass('/challenges')}>
               Challenges
             </Link>
+            <Link to="/leaderboard" className={navClass('/leaderboard')}>
+              Leaderboard
+            </Link>
             {user ? (
               <>
                 <Link to="/profile" className={navClass('/profile')}>
                   Profile
                 </Link>
+                {user.role === 'admin' && (
+                  <Link to="/admin" className={navClass('/admin')}>
+                    Admin
+                  </Link>
+                )}
                 <span className="text-gray-400">Hi, {user.username}</span>
                 <button
                   onClick={logout}
@@ -68,6 +76,13 @@ export default function Navbar() {
               onClick={() => setMenuOpen(false)}
             >
               Challenges
+            </Link>
+            <Link
+              to="/leaderboard"
+              className={mobileNavClass('/leaderboard')}
+              onClick={() => setMenuOpen(false)}
+            >
+              Leaderboard
             </Link>
             {user ? (
               <>
