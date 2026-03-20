@@ -1,0 +1,10 @@
+services:
+  piston:
+    image: ghcr.io/engineer-man/piston
+    container_name: piston
+    ports:
+      - "2358:2000"
+    privileged: true
+    restart: always
+    tmpfs:
+      - /piston/jobs:exec,uid=1000,gid=1000
